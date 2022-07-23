@@ -13,25 +13,32 @@ setInterval(()=> {
   api.getAccountCount(function(err, result) {
     counter.innerHTML = `<p>Cuentas registradas</p> ${result}`;
   });
-  console.log("hola")
+  
 },300000)
 
 const activateButton = document.getElementById("activateFetch");
+const inputUser = document.getElementById("inputUser");
+
 activateButton.addEventListener("click",fechBlog);
 activateButton.addEventListener("keydown",(e)=> {
-  if(e.keycode === 13) {
+  if(e.key === "Enter") {
     fechBlog();
   }
+});
+
+inputUser.addEventListener("keydown",(e)=> {
+  
+  if(e.key === "Enter") {
+   e.preventDefault()
+    fechBlog();
+     }
+  
 });
 
 
 function fechBlog() {
 let listPost = document.getElementById("postList");
 listPost.innerHTML = " ";
-
-const inputUser = document.getElementById("inputUser");
-
-
 
     const query = {
         tag: inputUser.value,
@@ -45,7 +52,7 @@ const inputUser = document.getElementById("inputUser");
 
         try {
 
-          console.log(res);
+          
           
             res.forEach(post => {
                 const json = JSON.parse(post.json_metadata);
@@ -57,7 +64,7 @@ const inputUser = document.getElementById("inputUser");
                 const created = new Date(post.created).toDateString();
 
                 
-                const containerTitle = document.createElement("h3");
+                const containerTitle = document.createElement("h2");
                 containerTitle.append(title);
                 const containerAuthor = document.createElement("p");
                 containerAuthor.append(`by ${author}`);
@@ -87,8 +94,13 @@ const inputUser = document.getElementById("inputUser");
       }
 
                    
-        catch(err) {
-          console.log(err)
+        catch {
+          
+          const ContainerMsgError = document.createElement("h2");
+          const msgError = "Introduce un nombre de usuario válido"
+          ContainerMsgError.style.color = "#900";
+          ContainerMsgError.append (msgError);          
+          listPost.append(ContainerMsgError);
         }
         
         
