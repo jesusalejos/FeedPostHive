@@ -2,9 +2,8 @@
 hive.api.setOptions({ url: 'https://api.hive.blog' });
 const api = hive.api;
 
-let postsData = []; // Almacén para exportar
+let postsData = []; 
 
-// Elementos del DOM
 const counter = document.getElementById("counterCountsHIvers");
 const activateButton = document.getElementById("activateFetch");
 const inputUser = document.getElementById("inputUser");
@@ -15,7 +14,7 @@ const exportBtn = document.getElementById("exportExcel");
 // --- Contador de Cuentas ---
 function updateAccountCount() {
     api.getAccountCount(function(err, result) {
-        if (!err) {
+        if (!err && counter) {
             counter.innerHTML = `<p>Cuentas registradas</p> ${result}`;
         }
     });
@@ -24,7 +23,7 @@ function updateAccountCount() {
 // --- Función Principal de Búsqueda ---
 function fechBlog() {
     const user = inputUser.value.trim().toLowerCase().replace('@', '');
-    const selectedMonth = monthFilter.value; // Formato YYYY-MM
+    const selectedMonth = monthFilter.value; 
 
     if (!user) {
         alert("Por favor, introduce un nombre de usuario");
@@ -35,27 +34,28 @@ function fechBlog() {
     exportBtn.style.display = "none";
     postsData = [];
 
-    // Query para obtener los últimos 100 posts (necesario para tener rango de fechas)
     const query = {
         tag: user,
-        limit: 100
+        limit: 50 // Bajamos el límite para mayor estabilidad inicial
     };
 
     api.getDiscussionsByBlog(query, function(err, res) {
-        if (err || !res || res.length === 0) {
-            listPost.innerHTML = "<h2 style='color: #900;'>Usuario no válido o sin contenido</h2>";
+        // VALIDACIÓN CRUCIAL: Verificamos si res es realmente una lista
+        if (err || !res || !Array.isArray(res)) {
+            listPost.innerHTML = "<h2 style='color: #900; text-align:center;'>Error: Usuario no encontrado o problema de conexión</h2>";
+            console.error("Error en API:", err);
             return;
         }
 
         let filteredPosts = res;
 
-        // Filtrar por mes si el usuario seleccionó uno
+        // Filtrar por mes
         if (selectedMonth) {
-            filteredPosts = res.filter(post => post.created.startsWith(selectedMonth));
+            filteredPosts = res.filter(post => post.created && post.created.startsWith(selectedMonth));
         }
 
         if (filteredPosts.length === 0) {
-            listPost.innerHTML = "<h2>No se encontraron posts en este mes específico.</h2>";
+            listPost.innerHTML = "<h2 style='text-align:center;'>No se encontraron posts para este periodo.</h2>";
             return;
         }
 
@@ -63,45 +63,40 @@ function fechBlog() {
         listPost.innerHTML = "";
         exportBtn.style.display = "inline-block";
 
+        // Ahora forEach funcionará seguro porque validamos que sea Array
         filteredPosts.forEach(post => {
-            const json = JSON.parse(post.json_metadata);
-            const image = (json.image && json.image[0]) ? json.image[0] : 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
+            let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
+            
+            try {
+                const metadata = JSON.parse(post.json_metadata);
+                if (metadata.image && metadata.image[0]) {
+                    image = metadata.image[0];
+                }
+            } catch (e) {
+                console.log("Error parseando metadata");
+            }
+
             const urlPlus = `https://peakd.com${post.url}`;
             const created = new Date(post.created).toDateString();
 
-            // Creación de elementos según tu lógica original
             const container = document.createElement("div");
             container.className = "post-card";
 
-            const containerTitle = document.createElement("h2");
-            containerTitle.innerText = post.title;
+            container.innerHTML = `
+                <h2>${post.title}</h2>
+                <p>by ${post.author}</p>
+                <div style="display:flex; justify-content:center">
+                    <img src="${image}" style="max-width: 450px; width: 100%; border-radius: 10px;">
+                </div>
+                <p>📅 ${created}</p>
+                <button class="view-btn" onclick="window.open('${urlPlus}')">Ver post...</button>
+            `;
 
-            const containerAuthor = document.createElement("p");
-            containerAuthor.innerText = `by ${post.author}`;
-
-            const centerImage = document.createElement("div");
-            const containerImage = document.createElement("img");
-            containerImage.setAttribute("src", image);
-            centerImage.append(containerImage);
-
-            const containerCreated = document.createElement("p");
-            containerCreated.innerText = created;
-
-            const buttonLink = document.createElement("button");
-            buttonLink.className = "view-btn";
-            buttonLink.innerHTML = "Ver post...";
-
-            container.append(containerTitle, containerAuthor, centerImage, containerCreated, buttonLink);
             listPost.append(container);
-
-            buttonLink.addEventListener("click", () => {
-                window.open(urlPlus);
-            });
         });
     });
 }
 
-// --- Función para Exportar CSV ---
 function exportarCSV() {
     if (postsData.length === 0) return;
     let csv = "\uFEFFTítulo,Fecha,Enlace\n";
@@ -119,16 +114,10 @@ function exportarCSV() {
     a.click();
 }
 
-// --- Listeners ---
+// Listeners
 activateButton.addEventListener("click", fechBlog);
 exportBtn.addEventListener("click", exportarCSV);
 
-inputUser.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") fechBlog();
-});
-
 // Inicialización
-window.onload = () => {
-    updateAccountCount();
-    setInterval(updateAccountCount, 300000);
-};
+updateAccountCount();
+setInterval(updateAccountCount, 300000);
