@@ -1,6 +1,6 @@
-// Configuración de cliente con nodos robustos
+// Configuración de cliente con múltiples nodos
 const client = new dhive.Client([
-    "https://api.deathwing.me",    // Nodo principal (Suele ser el más permisivo)
+    "https://api.deathwing.me",    // Nodo prioritario
     "https://api.hive.blog",       // Nodo oficial
     "https://api.openhive.network" // Respaldo
 ]);
@@ -45,34 +45,39 @@ async function fechBlog() {
     }
 
     listPost.innerHTML = "";
-    setStatus("⏳ Buscando en la blockchain...", "blue");
+    setStatus("⏳ Buscando historial en la blockchain...", "blue");
     if(exportBtn) exportBtn.style.display = "none";
     postsData = [];
 
-    // CAMBIO CLAVE: Usamos 'condenser_api' directamente.
-    // Este método permite hasta 100 posts (el otro solo dejaba 20).
-    const params = [{
-        tag: user,
-        limit: 100 
-    }];
+    // CAMBIO IMPORTANTE:
+    // Usamos 'get_discussions_by_author_before_date'
+    // Parámetros: [autor, start_permlink, fecha_tope, limite]
+    // start_permlink vacío "" significa "empezar desde el último post"
+    // fecha_tope futura asegura que traiga los más recientes
+    const params = [
+        user, 
+        "", 
+        "2025-12-31T23:59:59", 
+        100 
+    ];
 
     try {
-        // Llamada directa (client.call) para saltar la restricción de la librería
-        const result = await client.call('condenser_api', 'get_discussions_by_blog', params);
+        // Llamada al método que SÍ permite 100 items
+        const result = await client.call('condenser_api', 'get_discussions_by_author_before_date', params);
 
         if (!result || result.length === 0) {
-            setStatus("❌ Usuario no encontrado o sin posts recientes.", "red");
+            setStatus("❌ Usuario no encontrado o sin posts.", "red");
             return;
         }
 
-        // Filtramos los posts que coincidan con el mes (si se eligió uno)
+        // Filtramos por mes
         let filteredPosts = result;
         if (selectedMonth) {
             filteredPosts = result.filter(post => post.created.startsWith(selectedMonth));
         }
 
         if (filteredPosts.length === 0) {
-            setStatus("⚠️ No hay posts en ese mes específico (intenta buscar sin fecha).", "orange");
+            setStatus("⚠️ No hay posts en ese mes específico (dentro de los últimos 100).", "orange");
             return;
         }
 
@@ -80,7 +85,7 @@ async function fechBlog() {
         setStatus(`✅ Se encontraron ${filteredPosts.length} publicaciones.`, "green");
         if(exportBtn) exportBtn.style.display = "inline-block";
 
-        // Renderizado de las tarjetas
+        // Renderizado
         filteredPosts.forEach(post => {
             let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
             
@@ -111,8 +116,7 @@ async function fechBlog() {
 
     } catch (error) {
         console.error(error);
-        // Si sigue fallando, mostramos el error técnico en pantalla para depurar
-        setStatus(`❌ Error técnico: ${error.message || error}`, "red");
+        setStatus(`❌ Error: ${error.message || error}`, "red");
     }
 }
 
