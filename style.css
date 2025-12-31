@@ -1,0 +1,11 @@
+body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+.container { max-width: 800px; margin: auto; }
+.header-box { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; }
+#counterCountsHIvers { margin-bottom: 20px; font-weight: bold; font-size: 1.2em; color: #e31337; }
+input { padding: 12px; margin: 5px; border: 1px solid #ddd; border-radius: 8px; width: 200px; }
+button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+#activateFetch { background: #e31337; color: white; }
+#exportExcel { background: #28a745; color: white; }
+.post-card { background: white; padding: 20px; margin-top: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.post-card img { max-width: 450px; width: 100%; border-radius: 10px; margin: 15px 0; }
+.view-btn { background: #007bff; color: white; margin-top: 10px; }
