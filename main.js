@@ -1,8 +1,8 @@
-// Configuración de cliente con múltiples nodos para evitar caídas
+// Configuración de cliente con nodos robustos
 const client = new dhive.Client([
-    "https://api.deathwing.me",       // Nodo muy rápido y permisivo
-    "https://api.hive.blog",          // Nodo oficial
-    "https://api.openhive.network"    // Respaldo
+    "https://api.deathwing.me",    // Nodo principal (Suele ser el más permisivo)
+    "https://api.hive.blog",       // Nodo oficial
+    "https://api.openhive.network" // Respaldo
 ]);
 
 let postsData = []; 
@@ -16,29 +16,28 @@ const listPost = document.getElementById("postList");
 const exportBtn = document.getElementById("exportExcel");
 const statusMsg = document.getElementById("statusMessage");
 
-// --- Función para actualizar mensaje de estado ---
+// --- Función para mostrar mensajes de estado ---
 function setStatus(msg, color = "black") {
-    statusMsg.innerHTML = msg;
-    statusMsg.style.color = color;
+    if(statusMsg) {
+        statusMsg.innerHTML = msg;
+        statusMsg.style.color = color;
+    }
 }
 
 // --- Contador de Cuentas ---
-// Se ejecuta al cargar para verificar conexión
 async function updateAccountCount() {
     try {
-        // Llamada directa a la blockchain
         const result = await client.call('condenser_api', 'get_account_count', []);
-        counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas registradas: ${result}</p>`;
+        if(counter) counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas registradas: ${result}</p>`;
     } catch (error) {
         console.error("Error contador:", error);
-        counter.innerHTML = "Estado: Desconectado (Revisa tu internet)";
     }
 }
 
 // --- Función Principal ---
 async function fechBlog() {
     const user = inputUser.value.trim().toLowerCase().replace('@', '');
-    const selectedMonth = monthFilter.value; // YYYY-MM
+    const selectedMonth = monthFilter.value; // Formato YYYY-MM
 
     if (!user) {
         alert("Introduce un usuario");
@@ -47,40 +46,41 @@ async function fechBlog() {
 
     listPost.innerHTML = "";
     setStatus("⏳ Buscando en la blockchain...", "blue");
-    exportBtn.style.display = "none";
+    if(exportBtn) exportBtn.style.display = "none";
     postsData = [];
 
-    // Límite alto para poder filtrar por fechas antiguas
-    const query = {
+    // CAMBIO CLAVE: Usamos 'condenser_api' directamente.
+    // Este método permite hasta 100 posts (el otro solo dejaba 20).
+    const params = [{
         tag: user,
         limit: 100 
-    };
+    }];
 
     try {
-        // Usamos la librería dhive moderna
-        const result = await client.database.getDiscussions('blog', query);
+        // Llamada directa (client.call) para saltar la restricción de la librería
+        const result = await client.call('condenser_api', 'get_discussions_by_blog', params);
 
         if (!result || result.length === 0) {
-            setStatus("❌ Usuario no encontrado o sin posts.", "red");
+            setStatus("❌ Usuario no encontrado o sin posts recientes.", "red");
             return;
         }
 
-        // Filtrado por mes en Javascript
+        // Filtramos los posts que coincidan con el mes (si se eligió uno)
         let filteredPosts = result;
         if (selectedMonth) {
             filteredPosts = result.filter(post => post.created.startsWith(selectedMonth));
         }
 
         if (filteredPosts.length === 0) {
-            setStatus("⚠️ No hay posts en ese mes (Intenta buscar sin fecha primero).", "orange");
+            setStatus("⚠️ No hay posts en ese mes específico (intenta buscar sin fecha).", "orange");
             return;
         }
 
         postsData = filteredPosts;
         setStatus(`✅ Se encontraron ${filteredPosts.length} publicaciones.`, "green");
-        exportBtn.style.display = "inline-block";
+        if(exportBtn) exportBtn.style.display = "inline-block";
 
-        // Renderizado
+        // Renderizado de las tarjetas
         filteredPosts.forEach(post => {
             let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
             
@@ -94,14 +94,13 @@ async function fechBlog() {
             const urlPlus = `https://peakd.com${post.url}`;
             const created = new Date(post.created).toLocaleDateString();
 
-            // Crear HTML del post
             const card = document.createElement("div");
             card.className = "post-card";
             card.innerHTML = `
                 <h2>${post.title}</h2>
                 <p>by <strong>${post.author}</strong></p>
                 <div style="display:flex; justify-content:center; margin: 10px 0;">
-                    <img src="${image}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">
+                    <img src="${image}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: cover;">
                 </div>
                 <p>📅 ${created}</p>
                 <button class="view-btn" onclick="window.open('${urlPlus}', '_blank')">Ver post...</button>
@@ -112,7 +111,8 @@ async function fechBlog() {
 
     } catch (error) {
         console.error(error);
-        setStatus("❌ Error de API. Abre la consola (F12) para ver detalles.", "red");
+        // Si sigue fallando, mostramos el error técnico en pantalla para depurar
+        setStatus(`❌ Error técnico: ${error.message || error}`, "red");
     }
 }
 
@@ -122,7 +122,7 @@ function exportarCSV() {
     let csv = "\uFEFFTítulo,Fecha,Enlace\n";
     
     postsData.forEach(p => {
-        const cleanTitle = p.title.replace(/"/g, '""'); // Escapar comillas dobles
+        const cleanTitle = p.title.replace(/"/g, '""'); 
         const date = p.created.split('T')[0];
         const link = `https://peakd.com${p.url}`;
         csv += `"${cleanTitle}",${date},${link}\n`;
@@ -136,13 +136,15 @@ function exportarCSV() {
     link.click();
 }
 
-// Event Listeners
-activateButton.addEventListener("click", fechBlog);
-exportBtn.addEventListener("click", exportarCSV);
+// Listeners
+if(activateButton) activateButton.addEventListener("click", fechBlog);
+if(exportBtn) exportBtn.addEventListener("click", exportarCSV);
 
-inputUser.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") fechBlog();
-});
+if(inputUser) {
+    inputUser.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") fechBlog();
+    });
+}
 
 // Iniciar
 updateAccountCount();
