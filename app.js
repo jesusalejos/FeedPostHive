@@ -1,14 +1,14 @@
 // Configuración de cliente con múltiples nodos
 const client = new dhive.Client([
-    "https://api.deathwing.me",    // Nodo rápido
-    "https://api.hive.blog",       // Oficial
-    "https://api.openhive.network" // Respaldo
+    "https://api.deathwing.me",
+    "https://api.hive.blog",
+    "https://api.openhive.network"
 ]);
 
 let postsData = []; 
-let isSearching = false; // Para evitar doble clic
+let isSearching = false;
 
-// Referencias del DOM
+// Elementos DOM
 const counter = document.getElementById("counterCountsHIvers");
 const activateButton = document.getElementById("activateFetch");
 const inputUser = document.getElementById("inputUser");
@@ -17,7 +17,6 @@ const listPost = document.getElementById("postList");
 const exportBtn = document.getElementById("exportExcel");
 const statusMsg = document.getElementById("statusMessage");
 
-// --- Función para mensajes ---
 function setStatus(msg, color = "black") {
     if(statusMsg) {
         statusMsg.innerHTML = msg;
@@ -25,104 +24,88 @@ function setStatus(msg, color = "black") {
     }
 }
 
-// --- LÓGICA DE BÚSQUEDA PROFUNDA ---
-async function getDeepHistory(username, targetYear, targetMonth) {
+// --- BÚSQUEDA QUIRÚRGICA ---
+async function getTargetedHistory(username, targetYear, targetMonth) {
     let allPosts = [];
-    let startPermlink = ""; 
-    let beforeDate = "2025-12-31T23:59:59"; // Empezamos desde hoy hacia atrás
+    let startPermlink = "";
+    let beforeDate = "2025-12-31T23:59:59"; // Por defecto hoy
     
-    // Convertimos el mes objetivo a string para comparar fácil (ej: "2023-05")
-    const targetDateStr = targetYear && targetMonth ? `${targetYear}-${targetMonth}` : null;
-    
-    // SEGURIDAD: Máximo 2000 posts para no colgar el navegador si el usuario es un bot
-    const MAX_POSTS_CHECK = 2000; 
-    let totalChecked = 0;
+    // Si hay fecha seleccionada, calculamos el "Salto Temporal"
+    let targetDatePrefix = null;
 
-    setStatus(`⏳ Analizando historial... (Posts revisados: 0)`, "blue");
+    if (targetYear && targetMonth) {
+        // Javascript cuenta los meses desde 0 (Enero=0), pero el input da "01".
+        // new Date(anio, mes, 0) nos da el último día del mes.
+        const lastDayOfMonth = new Date(parseInt(targetYear), parseInt(targetMonth), 0).getDate();
+        
+        // Configuramos la fecha de corte al FINAL de ese mes
+        beforeDate = `${targetYear}-${targetMonth}-${lastDayOfMonth}T23:59:59`;
+        targetDatePrefix = `${targetYear}-${targetMonth}`;
+        
+        console.log(`Teletransportando búsqueda a: ${beforeDate}`);
+    }
 
-    while (true) {
-        // Pedimos lotes de 20 (Límite seguro de la API)
+    // Buscamos en bucle hasta completar el mes o llegar a 100 posts
+    // Máximo 10 rondas para no buclear infinito si hay error
+    for (let i = 0; i < 10; i++) {
+        
+        // Pedimos lotes de 20 (seguro para la API)
         const params = [username, startPermlink, beforeDate, 20];
         
         try {
             const batch = await client.call('condenser_api', 'get_discussions_by_author_before_date', params);
 
-            if (!batch || batch.length === 0) break; // Fin del historial
+            if (!batch || batch.length === 0) break;
 
-            // Si no es el primer lote, quitamos el primero (repetido del lote anterior)
-            if (totalChecked > 0) {
-                batch.shift();
-            }
+            // Eliminamos el primer elemento si no es la primera ronda (es duplicado)
+            if (allPosts.length > 0) batch.shift();
             
             if (batch.length === 0) break;
 
-            // Actualizamos contadores y referencias para el siguiente lote
-            totalChecked += batch.length;
-            const lastPost = batch[batch.length - 1];
-            startPermlink = lastPost.permlink;
-            beforeDate = lastPost.created;
+            // --- FILTRADO INTELIGENTE ---
+            // Si estamos buscando un mes específico:
+            if (targetDatePrefix) {
+                // Filtramos solo los que coinciden con el mes
+                const matchingPosts = batch.filter(p => p.created.startsWith(targetDatePrefix));
+                allPosts = allPosts.concat(matchingPosts);
 
-            setStatus(`⏳ Escaneando... (Llevamos ${totalChecked} posts revisados)`, "blue");
+                // Verificamos el último post del lote
+                const lastPost = batch[batch.length - 1];
+                const lastPostMonth = lastPost.created.substring(0, 7); // "2023-05"
 
-            // --- LÓGICA DE FILTRADO EN TIEMPO REAL ---
-            
-            // 1. Extraemos la fecha del último post de este lote (ej: "2023-04")
-            const lastPostMonth = lastPost.created.slice(0, 7);
-
-            // 2. Si buscamos un mes específico...
-            if (targetDateStr) {
-                // Chequeamos si alguno de este lote nos sirve
-                const matches = batch.filter(p => p.created.startsWith(targetDateStr));
-                if (matches.length > 0) {
-                    allPosts = allPosts.concat(matches);
-                }
-
-                // MOMENTO DE PARAR:
-                // Si la fecha del último post es MENOR que la que buscamos, 
-                // significa que ya pasamos el mes y estamos en el pasado.
-                // Ej: Buscamos "2023-05" y vamos por "2023-04". ¡Frenamos!
-                if (lastPostMonth < targetDateStr) {
+                // Si la fecha del último post bajado es MENOR al mes objetivo, 
+                // significa que ya nos pasamos hacia el pasado. ¡Terminamos!
+                if (lastPostMonth < targetDatePrefix) {
                     break;
                 }
             } else {
-                // Si no hay filtro de mes, guardamos todo (modo normal)
+                // Si no hay filtro de fecha, guardamos todo hasta 100
                 allPosts = allPosts.concat(batch);
-                if (allPosts.length >= 100) break; // Sin filtro, solo traemos 100
+                if (allPosts.length >= 100) break;
             }
 
-            // Seguridad anti-infinito
-            if (totalChecked >= MAX_POSTS_CHECK) {
-                alert("Se alcanzó el límite de seguridad (2000 posts scanneados). Intenta un mes más reciente.");
-                break;
-            }
+            // Preparamos siguiente ronda
+            const lastOne = batch[batch.length - 1];
+            startPermlink = lastOne.permlink;
+            beforeDate = lastOne.created;
 
-            // Si el lote vino incompleto, es el fin del historial
+            // Si el lote está incompleto, no hay más historial
             if (batch.length < 19) break;
 
         } catch (err) {
             console.warn("Error en lote:", err);
-            setStatus("❌ Error de red momentáneo, intentando seguir...", "orange");
-            // Esperamos 1 seg y reintentamos el mismo lote si quieres, o rompemos
             break; 
         }
     }
     return allPosts;
 }
 
-// --- Contador ---
-async function updateAccountCount() {
-    try {
-        const result = await client.call('condenser_api', 'get_account_count', []);
-        if(counter) counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas registradas: ${result}</p>`;
-    } catch (error) {}
-}
-
 // --- Función Principal ---
 async function fechBlog() {
-    if (isSearching) return; // Evitar doble clic
+    if (isSearching) return;
     
     const user = inputUser.value.trim().toLowerCase().replace('@', '');
-    const selectedMonth = monthFilter.value; // "2023-05"
+    const selectedMonth = monthFilter.value; // "2024-05"
 
     if (!user) { alert("Introduce un usuario"); return; }
 
@@ -131,27 +114,28 @@ async function fechBlog() {
     if(exportBtn) exportBtn.style.display = "none";
     postsData = [];
 
-    let searchYear = null;
-    let searchMonth = null;
+    // Parseamos la fecha
+    let sYear = null, sMonth = null;
     if (selectedMonth) {
-        [searchYear, searchMonth] = selectedMonth.split('-');
+        [sYear, sMonth] = selectedMonth.split('-');
     }
 
+    setStatus(selectedMonth ? `⏳ Saltando a ${selectedMonth} y buscando posts...` : "⏳ Buscando posts recientes...", "blue");
+
     try {
-        // Llamamos a la nueva función de búsqueda profunda
-        const result = await getDeepHistory(user, searchYear, searchMonth);
+        const result = await getTargetedHistory(user, sYear, sMonth);
 
         if (!result || result.length === 0) {
-            setStatus("❌ No se encontraron posts en ese mes (o el usuario no existe).", "red");
+            setStatus("❌ No hay posts en ese mes exacto.", "red");
             isSearching = false;
             return;
         }
 
         postsData = result;
-        setStatus(`✅ ¡Éxito! Encontrados ${result.length} posts del mes ${selectedMonth || "reciente"}.`, "green");
+        setStatus(`✅ ¡Encontrados ${result.length} posts!`, "green");
         if(exportBtn) exportBtn.style.display = "inline-block";
 
-        // Renderizar
+        // Renderizado
         result.forEach(post => {
             let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
             try {
@@ -197,9 +181,15 @@ function exportarCSV() {
     link.click();
 }
 
-// Eventos
+// Inicialización
 if(activateButton) activateButton.addEventListener("click", fechBlog);
 if(exportBtn) exportBtn.addEventListener("click", exportarCSV);
 if(inputUser) inputUser.addEventListener("keydown", (e) => { if (e.key === "Enter") fechBlog(); });
 
-updateAccountCount();
+// Contador simple al inicio
+(async () => {
+   try {
+       const res = await client.call('condenser_api', 'get_account_count', []);
+       counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas: ${res}</p>`;
+   } catch(e) {} 
+})();
