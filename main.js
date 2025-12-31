@@ -1,124 +1,148 @@
-// Usamos un nodo más confiable y rápido
-hive.api.setOptions({ url: 'https://api.deathwing.me' });
+// Configuración de cliente con múltiples nodos para evitar caídas
+const client = new dhive.Client([
+    "https://api.deathwing.me",       // Nodo muy rápido y permisivo
+    "https://api.hive.blog",          // Nodo oficial
+    "https://api.openhive.network"    // Respaldo
+]);
 
 let postsData = []; 
 
+// Referencias del DOM
 const counter = document.getElementById("counterCountsHIvers");
 const activateButton = document.getElementById("activateFetch");
 const inputUser = document.getElementById("inputUser");
 const monthFilter = document.getElementById("monthFilter");
 const listPost = document.getElementById("postList");
 const exportBtn = document.getElementById("exportExcel");
+const statusMsg = document.getElementById("statusMessage");
+
+// --- Función para actualizar mensaje de estado ---
+function setStatus(msg, color = "black") {
+    statusMsg.innerHTML = msg;
+    statusMsg.style.color = color;
+}
 
 // --- Contador de Cuentas ---
-function updateAccountCount() {
-    // Usamos el método directo de condenser_api para evitar errores de compatibilidad
-    hive.api.call('condenser_api.get_account_count', [], function(err, result) {
-        if (!err && counter) {
-            counter.innerHTML = `<p>Cuentas registradas</p> ${result}`;
-        }
-    });
+// Se ejecuta al cargar para verificar conexión
+async function updateAccountCount() {
+    try {
+        // Llamada directa a la blockchain
+        const result = await client.call('condenser_api', 'get_account_count', []);
+        counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas registradas: ${result}</p>`;
+    } catch (error) {
+        console.error("Error contador:", error);
+        counter.innerHTML = "Estado: Desconectado (Revisa tu internet)";
+    }
 }
 
 // --- Función Principal ---
-function fechBlog() {
+async function fechBlog() {
     const user = inputUser.value.trim().toLowerCase().replace('@', '');
-    const selectedMonth = monthFilter.value; 
+    const selectedMonth = monthFilter.value; // YYYY-MM
 
     if (!user) {
-        alert("Por favor, introduce un nombre de usuario");
+        alert("Introduce un usuario");
         return;
     }
 
-    listPost.innerHTML = "<h2 style='text-align:center'>Conectando con la Blockchain...</h2>";
-    if(exportBtn) exportBtn.style.display = "none";
+    listPost.innerHTML = "";
+    setStatus("⏳ Buscando en la blockchain...", "blue");
+    exportBtn.style.display = "none";
     postsData = [];
 
-    // Cambiamos a 'get_discussions_by_blog' vía call para asegurar el formato de respuesta
-    hive.api.call('condenser_api.get_discussions_by_blog', [{ tag: user, limit: 50 }], function(err, res) {
-        
-        if (err || !res) {
-            console.error("Detalle del error:", err);
-            listPost.innerHTML = "<h2 style='color: #900; text-align:center;'>Error de conexión: El nodo no responde</h2>";
+    // Límite alto para poder filtrar por fechas antiguas
+    const query = {
+        tag: user,
+        limit: 100 
+    };
+
+    try {
+        // Usamos la librería dhive moderna
+        const result = await client.database.getDiscussions('blog', query);
+
+        if (!result || result.length === 0) {
+            setStatus("❌ Usuario no encontrado o sin posts.", "red");
             return;
         }
 
-        // Validamos que sea un array
-        if (!Array.isArray(res)) {
-            listPost.innerHTML = "<h2 style='color: #900; text-align:center;'>Respuesta inesperada de la API</h2>";
-            return;
-        }
-
-        // Filtrado por mes
-        let filteredPosts = res;
+        // Filtrado por mes en Javascript
+        let filteredPosts = result;
         if (selectedMonth) {
-            filteredPosts = res.filter(function(post) {
-                return post.created && post.created.indexOf(selectedMonth) === 0;
-            });
+            filteredPosts = result.filter(post => post.created.startsWith(selectedMonth));
         }
 
         if (filteredPosts.length === 0) {
-            listPost.innerHTML = "<h2 style='text-align:center;'>No se encontraron posts. Revisa el usuario o el mes.</h2>";
+            setStatus("⚠️ No hay posts en ese mes (Intenta buscar sin fecha primero).", "orange");
             return;
         }
 
         postsData = filteredPosts;
-        listPost.innerHTML = "";
-        if(exportBtn) exportBtn.style.display = "inline-block";
+        setStatus(`✅ Se encontraron ${filteredPosts.length} publicaciones.`, "green");
+        exportBtn.style.display = "inline-block";
 
-        // Renderizado con bucle seguro
-        for (var i = 0; i < filteredPosts.length; i++) {
-            var post = filteredPosts[i];
-            var image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
+        // Renderizado
+        filteredPosts.forEach(post => {
+            let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
             
             try {
-                var metadata = JSON.parse(post.json_metadata);
-                if (metadata.image && metadata.image[0]) {
-                    image = metadata.image[0];
+                const json = JSON.parse(post.json_metadata);
+                if (json.image && json.image.length > 0) {
+                    image = json.image[0];
                 }
             } catch (e) {}
 
-            var urlPlus = "https://peakd.com" + post.url;
-            var createdDate = new Date(post.created).toLocaleDateString();
+            const urlPlus = `https://peakd.com${post.url}`;
+            const created = new Date(post.created).toLocaleDateString();
 
-            var card = document.createElement("div");
+            // Crear HTML del post
+            const card = document.createElement("div");
             card.className = "post-card";
+            card.innerHTML = `
+                <h2>${post.title}</h2>
+                <p>by <strong>${post.author}</strong></p>
+                <div style="display:flex; justify-content:center; margin: 10px 0;">
+                    <img src="${image}" style="max-width: 100%; max-height: 300px; border-radius: 10px;">
+                </div>
+                <p>📅 ${created}</p>
+                <button class="view-btn" onclick="window.open('${urlPlus}', '_blank')">Ver post...</button>
+            `;
             
-            card.innerHTML = 
-                "<h2>" + post.title + "</h2>" +
-                "<p>by " + post.author + "</p>" +
-                "<div style='display:flex; justify-content:center'>" +
-                    "<img src='" + image + "' style='max-width: 450px; width: 100%; border-radius: 10px;'>" +
-                "</div>" +
-                "<p>📅 " + createdDate + "</p>" +
-                "<button class='view-btn' onclick=\"window.open('" + urlPlus + "')\">Ver post...</button>";
-
             listPost.appendChild(card);
-        }
-    });
+        });
+
+    } catch (error) {
+        console.error(error);
+        setStatus("❌ Error de API. Abre la consola (F12) para ver detalles.", "red");
+    }
 }
 
-// --- Exportar ---
+// --- Exportar a CSV ---
 function exportarCSV() {
     if (postsData.length === 0) return;
-    var csv = "\uFEFFTítulo,Fecha,Enlace\n";
-    for (var i = 0; i < postsData.length; i++) {
-        var p = postsData[i];
-        var cleanTitle = p.title.replace(/,/g, "");
-        var date = p.created.split('T')[0];
-        csv += "\"" + cleanTitle + "\"," + date + ",https://peakd.com" + p.url + "\n";
-    }
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "posts_hive.csv";
-    a.click();
+    let csv = "\uFEFFTítulo,Fecha,Enlace\n";
+    
+    postsData.forEach(p => {
+        const cleanTitle = p.title.replace(/"/g, '""'); // Escapar comillas dobles
+        const date = p.created.split('T')[0];
+        const link = `https://peakd.com${p.url}`;
+        csv += `"${cleanTitle}",${date},${link}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `posts_${inputUser.value}.csv`);
+    link.click();
 }
 
-// Listeners
-if(activateButton) activateButton.addEventListener("click", fechBlog);
-if(exportBtn) exportBtn.addEventListener("click", exportarCSV);
+// Event Listeners
+activateButton.addEventListener("click", fechBlog);
+exportBtn.addEventListener("click", exportarCSV);
 
-// Inicialización
+inputUser.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") fechBlog();
+});
+
+// Iniciar
 updateAccountCount();
-setInterval(updateAccountCount, 300000);
