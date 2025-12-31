@@ -4,21 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hive Post Finder</title>
+    <script src="https://unpkg.com/@hiveio/dhive@latest/dist/dhive.js"></script>
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/@hiveio/hive-js/dist/hive.min.js"></script>
 </head>
 <body>
 
     <div class="container">
         <div class="header-box">
-            <div id="counterCountsHIvers">Cargando estadísticas...</div>
+            <div id="counterCountsHIvers">Conectando...</div>
             
             <div class="search-area">
-                <input type="text" id="inputUser" placeholder="Usuario (sin @)">
+                <input type="text" id="inputUser" placeholder="Usuario (ej: acidyo)">
                 <input type="month" id="monthFilter">
-                <button id="activateFetch">Buscar Posts</button>
+                <button id="activateFetch">BUSCAR POSTS</button>
                 <button id="exportExcel">📥 Exportar CSV</button>
             </div>
+            <div id="statusMessage"></div>
         </div>
 
         <div id="postList"></div>
