@@ -1,19 +1,17 @@
-body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; padding: 20px; }
-.container { max-width: 700px; margin: auto; }
-.header-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
-.search-area { margin-top: 20px; }
-input { padding: 12px; margin: 5px; border-radius: 10px; border: 1px solid #ddd; width: 45%; outline: none; }
-button { padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+body { font-family: 'Segoe UI', sans-serif; background-color: #f8f9fa; padding: 20px; }
+.container { max-width: 650px; margin: auto; }
+.header-box { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
+input { padding: 12px; margin: 5px; border-radius: 8px; border: 1px solid #ddd; width: 44%; }
+button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; }
 
-#activateFetch { background: #e31337; color: white; width: 100%; font-size: 1.1em; }
-.export-actions { display: flex; gap: 10px; margin-top: 10px; }
+#activateFetch { background: #e31337; color: white; width: 100%; }
+.export-actions { display: flex; gap: 10px; }
 #exportExcel { background: #28a745; color: white; flex: 1; }
 #exportAllWord { background: #2b5797; color: white; flex: 1; }
 
-.post-card { background: white; padding: 20px; margin-top: 20px; border-radius: 15px; border-left: 6px solid #e31337; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
-.post-card h3 { margin: 0 0 10px 0; color: #1a1a1a; }
-.card-btns { display: flex; gap: 10px; margin-top: 15px; }
-.view-btn { background: #f0f0f0; color: #333; flex: 1; font-size: 0.9em; }
-.word-btn-single { background: #e7f0fd; color: #2b5797; flex: 1; font-size: 0.9em; border: 1px solid #2b5797; }
+.post-card { background: white; padding: 15px; margin-top: 15px; border-radius: 12px; border-left: 5px solid #e31337; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.card-btns { display: flex; gap: 8px; margin-top: 10px; }
+.view-btn { background: #f1f1f1; color: #333; flex: 1; }
+.word-btn-single { background: #e7f0fd; color: #2b5797; flex: 1; border: 1px solid #2b5797; }
 
-#statusMessage { margin-top: 15px; font-weight: bold; }
+#statusMessage { margin: 10px 0; font-weight: bold; }

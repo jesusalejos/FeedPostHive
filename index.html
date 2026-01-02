@@ -3,34 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hive Post Finder Pro</title>
+    <title>Buscador Hive - Solo Posts Propios</title>
     <script src="https://unpkg.com/@hiveio/dhive@latest/dist/dhive.js"></script>
     <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
     <div class="container">
         <div class="header-box">
-            <div id="counterCountsHIvers">Cargando estado de la red...</div>
-            
+            <div id="counterCountsHIvers">Verificando red...</div>
             <div class="search-area">
-                <input type="text" id="inputUser" placeholder="Usuario (ej: acidyo)">
+                <input type="text" id="inputUser" placeholder="Usuario">
                 <input type="month" id="monthFilter">
-                <button id="activateFetch">🔎 BUSCAR PUBLICACIONES</button>
-                
+                <button id="activateFetch">🔎 BUSCAR MIS POSTS</button>
                 <div class="export-actions">
-                    <button id="exportExcel" style="display:none;">📥 Descargar Excel (CSV)</button>
-                    <button id="exportAllWord" style="display:none;">📄 Descargar TODO (Word)</button>
+                    <button id="exportExcel" style="display:none;">Excel (CSV)</button>
+                    <button id="exportAllWord" style="display:none;">Todo en Word</button>
                 </div>
             </div>
             <div id="statusMessage"></div>
         </div>
-
         <div id="postList"></div>
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>
