@@ -1,10 +1,19 @@
-body { font-family: 'Segoe UI', sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 20px; }
-.container { max-width: 800px; margin: auto; }
-.header-box { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; }
-input { padding: 12px; margin: 5px; border: 1px solid #ddd; border-radius: 8px; width: 40%; }
-button { padding: 12px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-#activateFetch { background: #e31337; color: white; width: 100%; }
-#exportExcel { background: #28a745; color: white; display: none; width: 100%; }
-.post-card { background: white; padding: 20px; margin-top: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #eee; }
-.view-btn { background: #007bff; color: white; width: 100%; }
+body { font-family: 'Segoe UI', sans-serif; background-color: #f0f2f5; padding: 20px; }
+.container { max-width: 700px; margin: auto; }
+.header-box { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); text-align: center; }
+.search-area { margin-top: 20px; }
+input { padding: 12px; margin: 5px; border-radius: 10px; border: 1px solid #ddd; width: 45%; outline: none; }
+button { padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+
+#activateFetch { background: #e31337; color: white; width: 100%; font-size: 1.1em; }
+.export-actions { display: flex; gap: 10px; margin-top: 10px; }
+#exportExcel { background: #28a745; color: white; flex: 1; }
+#exportAllWord { background: #2b5797; color: white; flex: 1; }
+
+.post-card { background: white; padding: 20px; margin-top: 20px; border-radius: 15px; border-left: 6px solid #e31337; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+.post-card h3 { margin: 0 0 10px 0; color: #1a1a1a; }
+.card-btns { display: flex; gap: 10px; margin-top: 15px; }
+.view-btn { background: #f0f0f0; color: #333; flex: 1; font-size: 0.9em; }
+.word-btn-single { background: #e7f0fd; color: #2b5797; flex: 1; font-size: 0.9em; border: 1px solid #2b5797; }
+
 #statusMessage { margin-top: 15px; font-weight: bold; }

@@ -1,20 +1,23 @@
-// Configuración de cliente
-const client = new dhive.Client([
-    "https://api.deathwing.me",
+// Configuración de múltiples nodos por si alguno falla
+const NODOS = [
     "https://api.hive.blog",
-    "https://api.openhive.network"
-]);
+    "https://api.deathwing.me",
+    "https://api.openhive.network",
+    "https://rpc.ausbit.dev"
+];
 
+let client = new dhive.Client(NODOS);
 let postsData = []; 
 let isSearching = false;
 
-// DOM
+// Referencias DOM
 const counter = document.getElementById("counterCountsHIvers");
 const activateButton = document.getElementById("activateFetch");
 const inputUser = document.getElementById("inputUser");
 const monthFilter = document.getElementById("monthFilter");
 const listPost = document.getElementById("postList");
 const exportBtn = document.getElementById("exportExcel");
+const exportWordBtn = document.getElementById("exportAllWord");
 const statusMsg = document.getElementById("statusMessage");
 
 function setStatus(msg, color = "black") {
@@ -24,174 +27,181 @@ function setStatus(msg, color = "black") {
     }
 }
 
-// --- FUNCIÓN DE ESCANEO CONTINUO ---
-async function crawlHistory(username, targetYear, targetMonth) {
-    let allPosts = [];
-    let startPermlink = "";
-    let beforeDate = "2025-12-31T23:59:59"; // Empezamos desde el futuro
-    
-    // Convertimos el mes objetivo a texto para comparar (Ej: "2023-05")
-    const targetDateStr = targetYear && targetMonth ? `${targetYear}-${targetMonth}` : null;
-    
-    let postsChecked = 0;
-    const SAFETY_LIMIT = 5000; // Tope para no colgar el navegador (equivale a años de posts diarios)
-
-    // Bucle infinito hasta encontrar el mes
-    while (true) {
-        // Pedimos 20 posts (límite seguro)
-        const params = [username, startPermlink, beforeDate, 20];
-
-        try {
-            const batch = await client.call('condenser_api', 'get_discussions_by_author_before_date', params);
-
-            // Si no devuelve nada, se acabó el historial del usuario
-            if (!batch || batch.length === 0) break;
-
-            // Eliminamos el primer elemento (duplicado de la paginación anterior)
-            if (postsChecked > 0) batch.shift();
-            
-            if (batch.length === 0) break;
-
-            // Datos para la siguiente vuelta
-            const lastPost = batch[batch.length - 1];
-            startPermlink = lastPost.permlink;
-            beforeDate = lastPost.created;
-            postsChecked += batch.length;
-
-            // Fecha actual del escaneo (para mostrar al usuario y filtrar)
-            const currentScanDate = lastPost.created.slice(0, 7); // "2024-08"
-
-            // Actualizamos estado en pantalla
-            if (targetDateStr) {
-                setStatus(`⏳ Escaneando historial... Voy por: ${currentScanDate} (Revisados: ${postsChecked})`, "blue");
-            } else {
-                setStatus(`⏳ Bajando últimos posts... (Revisados: ${postsChecked})`, "blue");
-            }
-
-            // --- LÓGICA DE DETECCIÓN ---
-            
-            if (targetDateStr) {
-                // 1. Buscamos coincidencias en este lote
-                const matches = batch.filter(p => p.created.startsWith(targetDateStr));
-                allPosts = allPosts.concat(matches);
-
-                // 2. ¿Ya nos pasamos?
-                // Si la fecha que estamos escaneando (ej: 2023-04) es MENOR que la buscada (ej: 2023-05)
-                // significa que ya revisamos todo el mes de Mayo y estamos en Abril. PARAR.
-                if (currentScanDate < targetDateStr) {
-                    break;
-                }
-            } else {
-                // Si no hay filtro, solo guardamos los primeros 100
-                allPosts = allPosts.concat(batch);
-                if (allPosts.length >= 100) break;
-            }
-
-            // Seguridad
-            if (postsChecked >= SAFETY_LIMIT) {
-                alert("Se alcanzó el límite de seguridad (5000 posts). El usuario publica demasiado.");
-                break;
-            }
-
-            // Si el lote vino incompleto (< 19), es el fin real
-            if (batch.length < 19) break;
-
-        } catch (err) {
-            console.warn("Error de red en lote:", err);
-            // Intentamos seguir en la siguiente vuelta
-            await new Promise(r => setTimeout(r, 1000)); // Esperar 1 seg
-        }
-    }
-    return allPosts;
+// Limpiar texto de Hive (Markdown/HTML)
+function limpiarTexto(body) {
+    return body
+        .replace(/!\[.*?\]\(.*?\)/g, "") // Imágenes Markdown
+        .replace(/<img.*?>/g, "")         // Imágenes HTML
+        .replace(/<.*?>/g, "")            // Tags HTML
+        .replace(/\[(.*?)\]\(.*?\)/g, "$1") // Links (deja solo el texto)
+        .trim();
 }
 
-// --- Función Principal ---
+// Escáner progresivo (Límite 20 por seguridad de nodo)
+async function escanearPosts(username, targetYear, targetMonth) {
+    let result = [];
+    let startAuthor = null;
+    let startPermlink = null;
+    const targetDate = targetYear && targetMonth ? `${targetYear}-${targetMonth}` : null;
+    let checked = 0;
+    const seen = new Set();
+
+    while (true) {
+        const params = { sort: 'posts', account: username, limit: 20 };
+        if (startAuthor && startPermlink) {
+            params.start_author = startAuthor;
+            params.start_permlink = startPermlink;
+        }
+
+        try {
+            const batch = await client.call('bridge', 'get_account_posts', params);
+            if (!batch || batch.length === 0) break;
+
+            let newInBatch = 0;
+            for (let post of batch) {
+                if (!seen.has(post.permlink)) {
+                    seen.add(post.permlink);
+                    newInBatch++;
+                    checked++;
+                    const postMonth = post.created.slice(0, 7);
+                    
+                    if (targetDate) {
+                        if (postMonth === targetDate) result.push(post);
+                    } else {
+                        result.push(post);
+                    }
+                }
+            }
+
+            const lastDate = batch[batch.length - 1].created.slice(0, 7);
+            if (targetDate) setStatus(`⏳ Escaneando historial: ${lastDate}...`, "blue");
+
+            if (targetDate && lastDate < targetDate) break;
+            if (batch.length < 20 || checked >= 2000) break;
+
+            startAuthor = batch[batch.length - 1].author;
+            startPermlink = batch[batch.length - 1].permlink;
+        } catch (e) {
+            console.error("Error lote:", e);
+            break;
+        }
+    }
+    return result;
+}
+
+// Función Buscar
 async function fechBlog() {
     if (isSearching) return;
-    
     const user = inputUser.value.trim().toLowerCase().replace('@', '');
-    const selectedMonth = monthFilter.value; // "2024-05"
+    const monthVal = monthFilter.value;
 
-    if (!user) { alert("Introduce un usuario"); return; }
+    if (!user) { alert("Ingresa un nombre de usuario"); return; }
 
     isSearching = true;
     listPost.innerHTML = "";
-    if(exportBtn) exportBtn.style.display = "none";
+    exportBtn.style.display = "none";
+    exportWordBtn.style.display = "none";
     postsData = [];
 
-    let sYear = null, sMonth = null;
-    if (selectedMonth) {
-        [sYear, sMonth] = selectedMonth.split('-');
-    }
-
     try {
-        const result = await crawlHistory(user, sYear, sMonth);
-
-        if (!result || result.length === 0) {
+        let res = await escanearPosts(user, monthVal?.split('-')[0], monthVal?.split('-')[1]);
+        
+        if (res.length === 0) {
             setStatus("❌ No se encontraron posts en ese periodo.", "red");
-            isSearching = false;
-            return;
+            isSearching = false; return;
         }
 
-        postsData = result;
-        setStatus(`✅ ¡Encontrados ${result.length} posts del mes ${selectedMonth || "actual"}!`, "green");
-        if(exportBtn) exportBtn.style.display = "inline-block";
+        // Orden Ascendente (Viejo -> Nuevo)
+        res.sort((a, b) => new Date(a.created) - new Date(b.created));
+        postsData = res;
 
-        // Renderizado
-        result.forEach(post => {
-            let image = 'https://images.hive.blog/DQmPZ979S6NfX8H7H7H7H7H7H7H7H7H7/noimage.png';
-            try {
-                const json = JSON.parse(post.json_metadata);
-                if (json.image && json.image.length > 0) image = json.image[0];
-            } catch (e) {}
+        setStatus(`✅ Se cargaron ${res.length} publicaciones.`, "green");
+        exportBtn.style.display = "inline-block";
+        exportWordBtn.style.display = "inline-block";
 
+        res.forEach(post => {
             const card = document.createElement("div");
             card.className = "post-card";
             card.innerHTML = `
-                <h2>${post.title}</h2>
-                <p>by <strong>${post.author}</strong></p>
-                <div style="display:flex; justify-content:center; margin: 10px 0;">
-                    <img src="${image}" style="max-width: 100%; max-height: 300px; border-radius: 10px; object-fit: cover;">
+                <h3>${post.title}</h3>
+                <p>📅 ${new Date(post.created).toLocaleDateString()} | 🕒 ${post.created.split('T')[1].slice(0, 5)}</p>
+                <div class="card-btns">
+                    <button class="view-btn" onclick="window.open('https://peakd.com/@${post.author}/${post.permlink}', '_blank')">Ver en Hive</button>
+                    <button class="word-btn-single">Abstraer este Post</button>
                 </div>
-                <p>📅 ${new Date(post.created).toLocaleDateString()}</p>
-                <button class="view-btn" onclick="window.open('https://peakd.com${post.url}', '_blank')">Ver post...</button>
             `;
+            card.querySelector('.word-btn-single').onclick = () => descargarUnWord(post);
             listPost.appendChild(card);
         });
-
-    } catch (error) {
-        console.error(error);
-        setStatus(`❌ Error: ${error.message}`, "red");
-    }
+    } catch (e) { setStatus("Error al conectar con la red Hive", "red"); }
     isSearching = false;
 }
 
-// --- Exportar CSV ---
-function exportarCSV() {
-    if (postsData.length === 0) return;
-    let csv = "\uFEFFTítulo,Fecha,Enlace\n";
-    postsData.forEach(p => {
-        const cleanTitle = p.title.replace(/"/g, '""'); 
-        const link = `https://peakd.com${p.url}`;
-        csv += `"${cleanTitle}",${p.created.split('T')[0]},${link}\n`;
+// Descargar UN post
+async function descargarUnWord(post) {
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+    const bodyText = limpiarTexto(post.body);
+    const doc = new Document({
+        sections: [{
+            children: [
+                new Paragraph({ text: post.title, heading: HeadingLevel.HEADING_1 }),
+                new Paragraph({ text: `Fecha: ${new Date(post.created).toLocaleString()}`, spacing: { after: 300 } }),
+                ...bodyText.split('\n').map(l => l.trim() ? new Paragraph({ children: [new TextRun(l)], spacing: { after: 120 } }) : null).filter(p => p)
+            ]
+        }]
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `posts_${inputUser.value}.csv`;
-    link.click();
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `${post.permlink}.docx`);
 }
 
-// Inicialización
-if(activateButton) activateButton.addEventListener("click", fechBlog);
-if(exportBtn) exportBtn.addEventListener("click", exportarCSV);
-if(inputUser) inputUser.addEventListener("keydown", (e) => { if (e.key === "Enter") fechBlog(); });
+// Descargar TODO en un Word
+async function descargarTodoWord() {
+    if (postsData.length === 0) return;
+    setStatus("⏳ Generando documento masivo...", "blue");
 
-// Contador
-(async () => {
-   try {
-       const res = await client.call('condenser_api', 'get_account_count', []);
-       counter.innerHTML = `<p style="color:#e31337; font-weight:bold;">Cuentas: ${res}</p>`;
-   } catch(e) {} 
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+    const content = [];
+
+    postsData.forEach((post, i) => {
+        content.push(new Paragraph({ text: post.title, heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
+        content.push(new Paragraph({ text: `Fecha: ${new Date(post.created).toLocaleString()}`, spacing: { after: 200 } }));
+        
+        limpiarTexto(post.body).split('\n').forEach(line => {
+            if (line.trim()) content.push(new Paragraph({ children: [new TextRun(line)], spacing: { after: 120 } }));
+        });
+
+        if (i < postsData.length - 1) {
+            content.push(new Paragraph({ text: "", pageBreakBefore: true }));
+        }
+    });
+
+    const doc = new Document({ sections: [{ children: content }] });
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Compilado_${inputUser.value}.docx`);
+    setStatus("✅ Documento masivo listo", "green");
+}
+
+// Exportar CSV
+function exportarCSV() {
+    let csv = "\uFEFFTítulo,Fecha,Enlace\n";
+    postsData.forEach(p => {
+        csv += `"${p.title.replace(/"/g, '""')}",${p.created.split('T')[0]},https://peakd.com/@${p.author}/${p.permlink}\n`;
+    });
+    saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `Reporte_${inputUser.value}.csv`);
+}
+
+// Listeners
+activateButton.onclick = fechBlog;
+exportBtn.onclick = exportarCSV;
+exportWordBtn.onclick = descargarTodoWord;
+inputUser.onkeydown = (e) => { if (e.key === "Enter") fechBlog(); };
+
+// Inicio: Probar conexión
+(async function init() {
+    try {
+        const res = await client.call('condenser_api', 'get_account_count', []);
+        counter.innerHTML = `<p style="color:green; font-weight:bold;">🟢 Conectado a Hive (${res} cuentas)</p>`;
+    } catch(e) {
+        counter.innerHTML = `<p style="color:red;">🔴 Error de conexión. Reintenta refrescando.</p>`;
+    }
 })();
