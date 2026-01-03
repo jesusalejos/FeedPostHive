@@ -58,29 +58,20 @@ async function escanearPosts(username, targetYear, targetMonth) {
                     seen.add(post.permlink);
                     checked++;
 
-                    // --- FILTRO DEFINITIVO ANTI-REBLOG Y ANTI-CROSSPOST ---
-                    
-                    // 1. Validar Autor (Elimina Reblogs básicos)
+                    // --- FILTROS DE SEGURIDAD (MANTENIDOS) ---
                     if (post.author !== username) continue;
-
-                    // 2. Analizar Metadatos (Aquí detectamos el Crosspost real)
+                    
                     let esCrosspost = false;
                     try {
                         let metadata = post.json_metadata;
                         if (typeof metadata === 'string') metadata = JSON.parse(metadata);
-                        
-                        // Si tiene 'original_author' o 'cross_post_author', ES un crosspost
                         if (metadata.original_author || metadata.cross_post_author || metadata.community === "hive-132410") {
                             esCrosspost = true;
                         }
                     } catch (e) {
-                        // Si falla el parseo, revisamos por texto en el cuerpo (último recurso)
                         if (post.body.includes("cross-post") && post.body.length < 300) esCrosspost = true;
                     }
-
                     if (esCrosspost) continue;
-
-                    // 3. Filtro por Título (Paranoia)
                     if (post.title.toLowerCase().includes("cross-post from")) continue;
 
                     const postMonth = post.created.slice(0, 7);
@@ -118,7 +109,7 @@ async function fechBlog() {
     exportWordBtn.style.display = "none";
     postsData = [];
 
-    setStatus("⏳ Buscando contenido original (limpiando reblogs y crossposts)...", "blue");
+    setStatus("⏳ Buscando contenido original...", "blue");
 
     try {
         let res = await escanearPosts(user, monthVal?.split('-')[0], monthVal?.split('-')[1]);
@@ -153,16 +144,40 @@ async function fechBlog() {
     isSearching = false;
 }
 
-// --- Word Logic ---
+// --- LÓGICA WORD INDIVIDUAL (Corregida) ---
 async function descargarUnWord(post) {
     const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
     const bodyText = limpiarTexto(post.body);
+    
+    // Construcción del documento
     const doc = new Document({
         sections: [{
             children: [
-                new Paragraph({ text: post.title, heading: HeadingLevel.HEADING_1 }),
-                new Paragraph({ text: `Autor: @${post.author} | Fecha: ${new Date(post.created).toLocaleString()}`, spacing: { after: 300 } }),
-                ...bodyText.split('\n').map(l => l.trim() ? new Paragraph({ children: [new TextRun(l)], spacing: { after: 120 } }) : null).filter(p => p)
+                // 1. Título
+                new Paragraph({ 
+                    text: post.title, 
+                    heading: HeadingLevel.HEADING_1 
+                }),
+                
+                // 2. Fecha (Debajo del título)
+                new Paragraph({ 
+                    text: `Fecha de publicación: ${new Date(post.created).toLocaleString()}`, 
+                    bold: true,
+                    spacing: { after: 300 } // Espacio antes de empezar el texto
+                }),
+                
+                // 3. Cuerpo del texto
+                ...bodyText.split('\n').map(l => l.trim() ? new Paragraph({ 
+                    children: [new TextRun(l)], 
+                    spacing: { after: 120 } 
+                }) : null).filter(p => p),
+
+                // 4. URL (Al final del post)
+                new Paragraph({ 
+                    text: `Enlace original: https://peakd.com/@${post.author}/${post.permlink}`,
+                    color: "0000FF", // Azul tipo link
+                    spacing: { before: 400 } // Espacio para separarlo del texto final
+                })
             ]
         }]
     });
@@ -170,6 +185,7 @@ async function descargarUnWord(post) {
     saveAs(blob, `${post.permlink}.docx`);
 }
 
+// --- LÓGICA WORD MASIVO (Corregida) ---
 async function descargarTodoWord() {
     if (postsData.length === 0) return;
     setStatus("⏳ Generando documento masivo...", "blue");
@@ -177,11 +193,33 @@ async function descargarTodoWord() {
     const content = [];
 
     postsData.forEach((post, i) => {
-        content.push(new Paragraph({ text: post.title, heading: HeadingLevel.HEADING_1, spacing: { before: 400 } }));
-        content.push(new Paragraph({ text: `URL: https://peakd.com/@${post.author}/${post.permlink}`, spacing: { after: 200 } }));
+        // 1. Título
+        content.push(new Paragraph({ 
+            text: post.title, 
+            heading: HeadingLevel.HEADING_1, 
+            spacing: { before: 400 } 
+        }));
+
+        // 2. Fecha (Debajo del título)
+        content.push(new Paragraph({ 
+            text: `Fecha: ${new Date(post.created).toLocaleString()}`, 
+            bold: true,
+            spacing: { after: 200 } 
+        }));
+
+        // 3. Cuerpo
         limpiarTexto(post.body).split('\n').forEach(line => {
             if (line.trim()) content.push(new Paragraph({ children: [new TextRun(line)], spacing: { after: 120 } }));
         });
+
+        // 4. URL (Al final)
+        content.push(new Paragraph({ 
+            text: `Link: https://peakd.com/@${post.author}/${post.permlink}`, 
+            color: "0000FF",
+            spacing: { before: 200, after: 200 } 
+        }));
+
+        // Salto de página
         if (i < postsData.length - 1) content.push(new Paragraph({ text: "", pageBreakBefore: true }));
     });
 
